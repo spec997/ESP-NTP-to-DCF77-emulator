@@ -13,9 +13,9 @@ String ntp_server   = "pool.ntp.org";
 String time_zone    = "CET-1CEST,M3.5.0,M10.5.0/3";
 String tz_name      = "Europa Środkowa (Warszawa)";
 String www_user     = "admin";
-String www_pass     = "admin";
+String www_pass     = "admin_pass";
 String ap_ssid      = "Televox_DCF77_Konfig";
-String ap_password  = "Test123456789";
+String ap_password  = "ap_pass_1234";
 
 const int dcfPin = 4; // GPIO4 = D2
 const unsigned led_pin = LED_BUILTIN;
