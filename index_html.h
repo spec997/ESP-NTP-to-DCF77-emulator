@@ -3,10 +3,16 @@
 
 const char MAIN_page[] PROGMEM = R"=====(
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
   <meta charset='UTF-8'>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  
   <title>Konfiguracja DCF77</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; }
@@ -16,27 +22,65 @@ const char MAIN_page[] PROGMEM = R"=====(
     p { margin: 8px 0; font-size: 14px; }
     .status-val { font-weight: bold; color: #28a745; }
     .ip-val { font-weight: bold; color: #0056b3; }
-    input[type=text], input[type=password], select { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+    input[type=text], input[type=password], select { 
+      width: 100%; padding: 10px; margin: 8px 0 15px 0; 
+      border: 1px solid #ccc; border-radius: 4px; 
+      -webkit-box-sizing: border-box; 
+      -moz-box-sizing: border-box;    
+      box-sizing: border-box; 
+    }
     input[type=submit] { width: 100%; background: #28a745; color: white; padding: 12px; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 10px; }
     input[type=submit]:hover { background: #218838; }
     .btn-logout { display: block; text-align: center; background: #dc3545; color: white; padding: 10px; border-radius: 4px; text-decoration: none; margin-top: 20px; font-size: 14px; font-weight: bold; }
     .btn-logout:hover { background: #bd2130; }
+    .btn-update { display: block; text-align: center; background: #6c757d; color: white; padding: 10px; border-radius: 4px; text-decoration: none; margin-top: 10px; font-size: 14px; font-weight: bold; }
+    .btn-update:hover { background: #5a6268; }
   </style>
   <script>
+    // FIX DLA SAFARI I BFCache
+    window.addEventListener('pageshow', function(event) {
+      if (event.persisted) {
+        // Jeśli strona pochodzi z przycisku "Wstecz", wymuś zapytanie do serwera
+        window.location.reload(); 
+      }
+    });
+
     function updateStatus() {
-      fetch('/status')
-        .then(response => response.json())
+      fetch('/status', { cache: 'no-store' })
+        .then(response => {
+           if (!response.ok) throw new Error('Błąd sieci');
+           return response.json();
+        })
         .then(data => {
-          document.getElementById('time').innerText = data.time;
-          document.getElementById('wifi').innerText = data.wifi;
-          document.getElementById('local_ip').innerText = data.local_ip;
-          document.getElementById('ap_ip').innerText = data.ap_ip;
-          document.getElementById('cur_ntp').innerText = data.ntp_server;
-          document.getElementById('cur_tz').innerText = data.tz_name;
-        }).catch(err => console.error('Błąd pobierania statusu:', err));
+          document.getElementById('time').innerText = data.time || 'Brak danych';
+          document.getElementById('wifi').innerText = data.wifi || 'Brak danych';
+          document.getElementById('local_ip').innerText = data.local_ip || '---';
+          document.getElementById('ap_ip').innerText = data.ap_ip || '---';
+          document.getElementById('cur_ntp').innerText = data.ntp_server || '---';
+          document.getElementById('cur_tz').innerText = data.tz_name || '---';
+        }).catch(err => {
+          console.warn('Brak połączenia z ESP:', err);
+          document.getElementById('time').innerText = 'Rozłączono...';
+        });
     }
-    setInterval(updateStatus, 1000);
+    setInterval(updateStatus, 2000);
     window.onload = updateStatus;
+function forceLogout() {
+      // Wysyłamy zapytanie w tle z błędnym loginem i hasłem
+      // To zmusza Safari (i inne przeglądarki) do nadpisania zapamiętanych danych
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "/", true, "wyloguj", "wyloguj");
+      xhr.send();
+      
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState == 4) {
+          // Niezależnie od wyniku (serwer odpowie 401 na błędne dane),
+          // przekierowujemy użytkownika na ekran z informacją o wylogowaniu
+          window.location.href = "/logout";
+        }
+      }
+    }
+
   </script>
 </head>
 <body>
@@ -73,7 +117,8 @@ const char MAIN_page[] PROGMEM = R"=====(
       
       <input type='submit' value='Zapisz i Zastosuj'>
     </form>
-    <a href='/logout' class='btn-logout'>Wyloguj z panelu</a>
+    <a href='javascript:void(0);' onclick='forceLogout()' class='btn-logout'>Wyloguj z panelu</a>
+    <a href='/update' class='btn-update'>Aktualizacja oprogramowania (OTA)</a>
   </div>
 </body>
 </html>
