@@ -8,11 +8,11 @@ const char MAIN_page[] PROGMEM = R"=====(
   <meta charset='UTF-8'>
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-  
+
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  
+
   <title>Konfiguracja DCF77</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f4f6f9; color: #333; }
@@ -22,12 +22,14 @@ const char MAIN_page[] PROGMEM = R"=====(
     p { margin: 8px 0; font-size: 14px; }
     .status-val { font-weight: bold; color: #28a745; }
     .ip-val { font-weight: bold; color: #0056b3; }
-    input[type=text], input[type=password], select { 
-      width: 100%; padding: 10px; margin: 8px 0 15px 0; 
-      border: 1px solid #ccc; border-radius: 4px; 
-      -webkit-box-sizing: border-box; 
-      -moz-box-sizing: border-box;    
-      box-sizing: border-box; 
+    .hint { font-size: 12px; color: #888; margin: -12px 0 12px 0; }
+    input[type=text], input[type=password], select {
+      width: 100%; padding: 10px; margin: 8px 0 4px 0;
+      border: 1px solid #ccc; border-radius: 4px;
+      font-size: 16px; /* Safari na iOS powiększa (zoomuje) stronę, gdy pole ma czcionkę < 16px */
+      -webkit-box-sizing: border-box;
+      -moz-box-sizing: border-box;
+      box-sizing: border-box;
     }
     input[type=submit] { width: 100%; background: #28a745; color: white; padding: 12px; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 10px; }
     input[type=submit]:hover { background: #218838; }
@@ -41,7 +43,7 @@ const char MAIN_page[] PROGMEM = R"=====(
     window.addEventListener('pageshow', function(event) {
       if (event.persisted) {
         // Jeśli strona pochodzi z przycisku "Wstecz", wymuś zapytanie do serwera
-        window.location.reload(); 
+        window.location.reload();
       }
     });
 
@@ -65,22 +67,41 @@ const char MAIN_page[] PROGMEM = R"=====(
     }
     setInterval(updateStatus, 2000);
     window.onload = updateStatus;
-function forceLogout() {
-      // Wysyłamy zapytanie w tle z błędnym loginem i hasłem
-      // To zmusza Safari (i inne przeglądarki) do nadpisania zapamiętanych danych
-      var xhr = new XMLHttpRequest();
-      xhr.open("GET", "/", true, "wyloguj", "wyloguj");
-      xhr.send();
-      
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState == 4) {
-          // Niezależnie od wyniku (serwer odpowie 401 na błędne dane),
-          // przekierowujemy użytkownika na ekran z informacją o wylogowaniu
-          window.location.href = "/logout";
+
+    function forceLogout() {
+      // Wysyłamy żądanie z celowo błędnymi danymi logowania do dedykowanego
+      // endpointu /logout-auth (chronionego tym samym realm co panel).
+      // Nagłówek Authorization ustawiamy ręcznie - działa to pewniej
+      // w Safari niż argumenty user/pass przekazywane do XMLHttpRequest.open().
+      // Serwer odpowie 401, co ma skłonić przeglądarkę do porzucenia
+      // zapamiętanego hasła do panelu.
+      fetch('/logout-auth', {
+        cache: 'no-store',
+        headers: {
+          'Authorization': 'Basic ' + btoa('wyloguj:' + Date.now())
         }
-      }
+      }).catch(function() {
+        // Błąd sieci nie jest tu istotny - i tak przechodzimy do ekranu wylogowania
+      }).finally(function() {
+        window.location.href = '/logout';
+      });
     }
 
+    // Prosta walidacja po stronie klienta - jeśli pole hasła jest wypełnione,
+    // musi mieć min. 8 znaków (serwer i tak weryfikuje to niezależnie).
+    function validateForm() {
+      var adminPass = document.getElementsByName('n_admin_pass')[0].value;
+      var apPass = document.getElementsByName('n_ap_pass')[0].value;
+      if (adminPass.length > 0 && adminPass.length < 8) {
+        alert('Nowe hasło administratora musi mieć min. 8 znaków.');
+        return false;
+      }
+      if (apPass.length > 0 && apPass.length < 8) {
+        alert('Nowe hasło do AP musi mieć min. 8 znaków.');
+        return false;
+      }
+      return true;
+    }
   </script>
 </head>
 <body>
@@ -96,13 +117,15 @@ function forceLogout() {
 
   <div class='card'>
     <h2>Ustawienia Urządzenia</h2>
-    <form action='/save' method='POST'>
+    <form action='/save' method='POST' onsubmit='return validateForm();'>
+      <input type='hidden' name='csrf_token' value='%CSRF_TOKEN%'>
+
       <h3>Połączenie Wi-Fi</h3>
-      Nazwa nowej sieci (SSID):<br><input type='text' name='n_ssid' placeholder='Pozostaw puste, by nie zmieniać Wi-Fi'><br>
-      Hasło sieci:<br><input type='password' name='n_password' placeholder='Hasło Wi-Fi'><br>
-      
+      Nazwa nowej sieci (SSID):<br><input type='text' name='n_ssid' maxlength='32' placeholder='Pozostaw puste, by nie zmieniać Wi-Fi'><br>
+      Hasło sieci:<br><input type='password' name='n_password' maxlength='63' autocomplete='new-password' placeholder='Hasło Wi-Fi'><br>
+
       <h3>Czas i Synchronizacja</h3>
-      Serwer czasu NTP:<br><input type='text' name='n_ntp' value='pool.ntp.org'><br>
+      Serwer czasu NTP:<br><input type='text' name='n_ntp' maxlength='64' value='pool.ntp.org'><br>
       Strefa czasowa:<br>
       <select name='n_tz'>
         <option value='CET-1CEST,M3.5.0,M10.5.0/3|Europa Środkowa (Warszawa)'>Europa Środkowa (Warszawa, Berlin)</option>
@@ -112,9 +135,13 @@ function forceLogout() {
       </select><br>
 
       <h3>Bezpieczeństwo i Dostęp</h3>
-      Nowe hasło administratora (admin):<br><input type='password' name='n_admin_pass' placeholder='Pozostaw puste, by nie zmieniać'><br>
-      Nowe hasło do AP (ratunkowego):<br><input type='password' name='n_ap_pass' placeholder='Min. 8 znaków (puste = bez zmian)'><br>
-      
+      Nowe hasło administratora (admin):<br>
+      <input type='password' name='n_admin_pass' maxlength='63' autocomplete='new-password' placeholder='Pozostaw puste, by nie zmieniać'>
+      <div class='hint'>Min. 8 znaków (puste = bez zmian)</div>
+      Nowe hasło do AP (ratunkowego):<br>
+      <input type='password' name='n_ap_pass' maxlength='63' autocomplete='new-password' placeholder='Min. 8 znaków (puste = bez zmian)'>
+      <div class='hint'>Min. 8 znaków (puste = bez zmian)</div>
+
       <input type='submit' value='Zapisz i Zastosuj'>
     </form>
     <a href='javascript:void(0);' onclick='forceLogout()' class='btn-logout'>Wyloguj z panelu</a>
